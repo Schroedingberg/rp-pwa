@@ -56,16 +56,16 @@
   ;; Input: flat events
   [{:type :set-completed :workout :push-a :exercise "Bench" :set-index 0 :performed-weight 135}
    {:type :set-completed :workout :push-a :exercise "Bench" :set-index 1 :performed-weight 135}]
-  
+
   ;; + Plan template
   {"Meso 1" {"Week 1" {:push-a {"Bench" [{:weight 130 :reps 10}
-                                          {:weight 130 :reps 10}
-                                          {:weight 130 :reps 10}]}}}}
-  
+                                         {:weight 130 :reps 10}
+                                         {:weight 130 :reps 10}]}}}}
+
   ;; = Merged result
   {"Meso 1" {"Week 1" {:push-a {"Bench" [{:weight 130 :reps 10 :performed-weight 135}
-                                          {:weight 130 :reps 10 :performed-weight 135}
-                                          {:weight 130 :reps 10}]}}}}) ;; third set still pending
+                                         {:weight 130 :reps 10 :performed-weight 135}
+                                         {:weight 130 :reps 10}]}}}}) ;; third set still pending
 
 ;; ### Deduplication
 ;;
@@ -75,10 +75,10 @@
 (comment
   ;; User logs 135 lbs...
   {:set-index 0 :performed-weight 135 :timestamp 1000}
-  
+
   ;; Then corrects to 140 lbs
   {:set-index 0 :performed-weight 140 :timestamp 2000}
-  
+
   ;; dedupe-by-latest keeps only the correction
   ;; → {:set-index 0 :performed-weight 140 :timestamp 2000}
   )

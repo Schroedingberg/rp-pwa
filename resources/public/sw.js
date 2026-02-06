@@ -1,9 +1,9 @@
 // Service Worker for Romance Progression PWA
-const CACHE_NAME = 'rp-v1';
+const CACHE_NAME = 'rp-v2';
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/js/main.js',
+  './',
+  './index.html',
+  './js/main.js',
   'https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css'
 ];
 
@@ -48,7 +48,7 @@ self.addEventListener('fetch', (event) => {
     }).catch(() => {
       // Offline fallback for navigation
       if (event.request.mode === 'navigate') {
-        return caches.match('/');
+        return caches.match('./');
       }
     })
   );

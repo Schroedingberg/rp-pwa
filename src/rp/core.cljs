@@ -8,7 +8,7 @@
 
 (defn- register-service-worker []
   (when (.-serviceWorker js/navigator)
-    (-> js/navigator .-serviceWorker (.register "/sw.js"))))
+    (-> js/navigator .-serviceWorker (.register "sw.js"))))
 
 (defn init! []
   (storage/load-db!

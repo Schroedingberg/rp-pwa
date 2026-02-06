@@ -20,6 +20,6 @@
 (comment
   ;; Start interactive development
   (start!)
-  
+
   ;; Build static docs
   (build-docs!))
