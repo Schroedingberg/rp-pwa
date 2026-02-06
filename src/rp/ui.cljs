@@ -25,43 +25,67 @@
 (defonce current-page (r/atom :workouts))
 
 (defn- set-row
-  "A single set with weight/reps inputs."
+  "A single set with weight/reps inputs.
+  Completed sets can be clicked to enter edit mode for corrections."
   [mesocycle microcycle workout exercise set-index set-data]
   (let [weight (r/atom "")
-        reps (r/atom "")]
+        reps (r/atom "")
+        editing? (r/atom false)]
     (fn [mesocycle microcycle workout exercise set-index set-data]
       (let [{:keys [performed-weight performed-reps prescribed-weight prescribed-reps]} set-data
-            completed? (some? performed-weight)]
+            completed? (some? performed-weight)
+            in-edit-mode? @editing?
+            editable? (or (not completed?) in-edit-mode?)]
         [:form {:style {:display "flex" :gap "0.5rem" :align-items "center" :margin-bottom "0.5rem"}}
          [:input {:type "number"
                   :placeholder (if prescribed-weight (str prescribed-weight " kg") "kg")
-                  :value (if completed? performed-weight @weight)
-                  :disabled completed?
+                  :value (cond
+                           in-edit-mode? @weight
+                           completed? performed-weight
+                           :else @weight)
+                  :disabled (not editable?)
                   :on-change #(reset! weight (-> % .-target .-value))
                   :style {:width "5rem"}}]
          [:span "×"]
          [:input {:type "number"
                   :placeholder (if prescribed-reps (str prescribed-reps) "reps")
-                  :value (if completed? performed-reps @reps)
-                  :disabled completed?
+                  :value (cond
+                           in-edit-mode? @reps
+                           completed? performed-reps
+                           :else @reps)
+                  :disabled (not editable?)
                   :on-change #(reset! reps (-> % .-target .-value))
                   :style {:width "4rem"}}]
-         [:input {:type "checkbox"
-                  :checked completed?
-                  :disabled completed?
-                  :on-change (fn [_]
-                               (when (and (seq @weight) (seq @reps))
-                                 (db/log-set!
-                                  {:mesocycle mesocycle
-                                   :microcycle microcycle
-                                   :workout workout
-                                   :exercise exercise
-                                   :set-index set-index
-                                   :weight (js/parseFloat @weight)
-                                   :reps (js/parseInt @reps)
-                                   :prescribed-weight prescribed-weight
-                                   :prescribed-reps prescribed-reps})))}]
-         (when completed? [:span "✓"])]))))
+         (if (and completed? (not in-edit-mode?))
+           ;; Completed: show checkmark, click to edit
+           [:button.outline {:type "button"
+                             :style {:padding "0.25rem 0.5rem" :margin 0}
+                             :on-click (fn [_]
+                                         (reset! weight (str performed-weight))
+                                         (reset! reps (str performed-reps))
+                                         (reset! editing? true))}
+            "✓"]
+           ;; Not completed or editing: show checkbox to save
+           [:input {:type "checkbox"
+                    :checked false
+                    :on-change (fn [_]
+                                 (when (and (seq @weight) (seq @reps))
+                                   (db/log-set!
+                                    {:mesocycle mesocycle
+                                     :microcycle microcycle
+                                     :workout workout
+                                     :exercise exercise
+                                     :set-index set-index
+                                     :weight (js/parseFloat @weight)
+                                     :reps (js/parseInt @reps)
+                                     :prescribed-weight prescribed-weight
+                                     :prescribed-reps prescribed-reps})
+                                   (reset! editing? false)))}])
+         (when in-edit-mode?
+           [:button.secondary.outline {:type "button"
+                                       :style {:padding "0.25rem 0.5rem" :margin 0}
+                                       :on-click #(reset! editing? false)}
+            "✕"])]))))
 
 (defn- exercise-card
   "An exercise with its sets."
