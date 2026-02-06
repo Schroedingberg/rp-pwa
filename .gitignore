@@ -27,3 +27,4 @@ Thumbs.db
 
 # Clerk output
 docs/clerk/
+.clerk/
