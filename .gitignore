@@ -23,13 +23,4 @@ Thumbs.db
 # REPL
 .nrepl-port
 .cpcache/
-.clj-kondo/
-.clj-kondo/.cache/v1/clj/rp.domain.plan.transit.json
-.clj-kondo/.cache/v1/clj/rp.domain.state.transit.json
-.clj-kondo/.cache/v1/cljs/rp.db.transit.json
-.clj-kondo/.cache/v1/cljs/rp.db.transit.json
-.clj-kondo/.cache/v1/cljs/rp.state.transit.json
-.clj-kondo/.cache/v1/cljs/rp.state.transit.json
-.clj-kondo/.cache/v1/cljs/rp.storage.transit.json
-.clj-kondo/.cache/v1/cljs/rp.ui.transit.json
-.clj-kondo/.cache/v1/cljs/rp.db.transit.json
+.clj-kondo/.cache/
