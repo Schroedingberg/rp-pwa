@@ -28,6 +28,11 @@
 ;; -----------------------------------------------------------------------------
 ;; Set row component
 ;; -----------------------------------------------------------------------------
+;; TODO: This is still quite nested. Consider:
+;; - Moving to a state machine approach (e.g. {:state :editing/:completed/:skipped})
+;; - Extracting the action buttons into a separate component
+;; - Using a multimethod dispatch on state for rendering
+;; -----------------------------------------------------------------------------
 
 (defn- set-location
   "Build the location map for a set (used by db functions)."
