@@ -80,7 +80,8 @@
   {:set-index 0 :performed-weight 140 :timestamp 2000}
   
   ;; dedupe-by-latest keeps only the correction
-  ;; → {:set-index 0 :performed-weight 140 :timestamp 2000})
+  ;; → {:set-index 0 :performed-weight 140 :timestamp 2000}
+  )
 
 ;; ## Data Flow Diagram
 ;;
