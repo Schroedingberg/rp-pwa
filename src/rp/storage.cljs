@@ -18,3 +18,9 @@
   ;; Auto-save on every transaction
   (add-watch db/db-version :auto-save (fn [_ _ _ _] (save-db!)))
   (on-complete))
+
+(defn clear-db!
+  "Clear all persisted data and reset the database."
+  []
+  (.removeItem js/localStorage DB-KEY)
+  (db/clear-all!))

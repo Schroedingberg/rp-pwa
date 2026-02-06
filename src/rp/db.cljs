@@ -19,7 +19,13 @@
    :event/performed-reps   {}
    :event/prescribed-weight {}
    :event/prescribed-reps  {}
-   :event/timestamp        {}})
+   :event/timestamp        {}
+   ;; Feedback events
+   :event/muscle-group     {}
+   :event/soreness         {}
+   :event/pump             {}
+   :event/joint-pain       {}
+   :event/sets-workload    {}})
 
 (defonce conn (d/create-conn schema))
 (defonce db-version (r/atom 0))
@@ -60,6 +66,37 @@
                  :event/set-index set-index
                  :event/timestamp (js/Date.now)}]))
 
+(defn log-soreness-reported!
+  "Log soreness status for a muscle group (after first set).
+  soreness: :never-sore | :healed-early | :healed-just-in-time | :still-sore"
+  [{:keys [mesocycle microcycle workout muscle-group soreness]}]
+  (d/transact! conn
+               [{:event/id (str (random-uuid))
+                 :event/type :soreness-reported
+                 :event/mesocycle mesocycle
+                 :event/microcycle microcycle
+                 :event/workout workout
+                 :event/muscle-group muscle-group
+                 :event/soreness soreness
+                 :event/timestamp (js/Date.now)}]))
+
+(defn log-session-rated!
+  "Log session feedback for a muscle group (after finishing all sets).
+  pump: 0-4, joint-pain: :none | :some | :severe, 
+  sets-workload: :easy | :just-right | :pushed-limits | :too-much"
+  [{:keys [mesocycle microcycle workout muscle-group pump joint-pain sets-workload]}]
+  (d/transact! conn
+               [{:event/id (str (random-uuid))
+                 :event/type :session-rated
+                 :event/mesocycle mesocycle
+                 :event/microcycle microcycle
+                 :event/workout workout
+                 :event/muscle-group muscle-group
+                 :event/pump pump
+                 :event/joint-pain joint-pain
+                 :event/sets-workload sets-workload
+                 :event/timestamp (js/Date.now)}]))
+
 ;; --- Queries ---
 
 (defn- entity->event
@@ -87,3 +124,9 @@
 (defn load-from-edn! [edn-str]
   (when edn-str
     (reset! conn (d/from-serializable (reader/read-string edn-str) schema))))
+
+(defn clear-all!
+  "Reset the database to empty state."
+  []
+  (reset! conn (d/empty-db schema))
+  (swap! db-version inc))

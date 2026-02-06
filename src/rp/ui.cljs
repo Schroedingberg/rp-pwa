@@ -5,11 +5,10 @@
     app
     ├── nav-menu (navigation)
     └── current page:
-        ├── workouts-page
-        │   └── microcycle-section (week)
-        │       └── workout-section (day)
-        │           └── exercise-card
-        │               └── set-row (weight/reps input)
+        ├── workouts-page (inline week/day structure)
+        │   ├── soreness-popup / session-rating-popup (feedback)
+        │   └── exercise-card
+        │       └── set-row (weight/reps input + actions)
         ├── plans-page
         └── settings-page"
   (:require [reagent.core :as r]
@@ -18,6 +17,7 @@
             [rp.plan :as plan]
             [rp.progression :as prog]
             [rp.state :as state]
+            [rp.storage :as storage]
             [clojure.string :as str]))
 
 ;; -----------------------------------------------------------------------------
@@ -84,7 +84,7 @@
             in-edit-mode? @editing?
             editable? (and (not skipped?) (or (not completed?) in-edit-mode?))
             location (set-location mesocycle microcycle workout exercise set-index)
-            
+
             ;; Compute prescriptions from event history
             events (db/get-all-events)
             user-weight (when (seq @weight) (js/parseFloat @weight))
@@ -166,23 +166,107 @@
        ^{:key idx}
        [set-row mesocycle microcycle workout-key exercise-name idx set-data])]))
 
-(defn- workout-section
-  "A workout day with its exercises."
-  [mesocycle microcycle workout-key exercises-map]
-  [:section {:key (name workout-key)}
-   [:h3 (str/capitalize (name workout-key))]
-   (for [[exercise-name sets] exercises-map]
-     ^{:key exercise-name}
-     [exercise-card mesocycle microcycle workout-key exercise-name sets])])
+;; -----------------------------------------------------------------------------
+;; Feedback popups
+;; -----------------------------------------------------------------------------
 
-(defn- microcycle-section
-  "A week with its workouts."
-  [mesocycle-name microcycle-idx workouts-map]
-  [:section {:key microcycle-idx}
-   [:h2 (str "Week " (inc microcycle-idx))]
-   (for [[workout-key exercises-map] workouts-map]
-     ^{:key workout-key}
-     [workout-section mesocycle-name microcycle-idx workout-key exercises-map])])
+(def soreness-options
+  [{:value :never-sore :label "Never got sore"}
+   {:value :healed-early :label "Healed a while ago"}
+   {:value :healed-just-in-time :label "Healed just in time"}
+   {:value :still-sore :label "Still sore"}])
+
+(def sets-workload-options
+  [{:value :easy :label "Easy"}
+   {:value :just-right :label "Just right"}
+   {:value :pushed-limits :label "Pushed my limits"}
+   {:value :too-much :label "Too much"}])
+
+(def joint-pain-options
+  [{:value :none :label "No pain"}
+   {:value :some :label "Some discomfort"}
+   {:value :severe :label "Significant pain"}])
+
+(defn- soreness-popup
+  "Modal dialog for soreness feedback after first set."
+  [{:keys [_muscle-group on-submit on-dismiss]}]
+  (let [selected (r/atom nil)]
+    (fn [{:keys [muscle-group]}]
+      [:dialog {:open true :style {:max-width "400px"}}
+       [:article
+        [:header
+         [:h3 (str "How's your " (name muscle-group) "?")]
+         [:p "Since your last session..."]]
+        [:div {:style {:display "flex" :flex-direction "column" :gap "0.5rem"}}
+         (doall
+          (for [{:keys [value label]} soreness-options]
+            ^{:key value}
+            [:label {:style {:display "flex" :align-items "center" :gap "0.5rem"}}
+             [:input {:type "radio"
+                      :name "soreness"
+                      :checked (= @selected value)
+                      :on-change #(reset! selected value)}]
+             label]))]
+        [:footer {:style {:margin-top "1rem"}}
+         [:button {:disabled (nil? @selected)
+                   :on-click #(on-submit muscle-group @selected)}
+          "Submit"]
+         [:button.secondary {:on-click #(on-dismiss muscle-group) :style {:margin-left "0.5rem"}}
+          "Skip"]]]])))
+
+(defn- session-rating-popup
+  "Modal dialog for session feedback after finishing muscle group."
+  [{:keys [_muscle-group on-submit on-dismiss]}]
+  (let [pump (r/atom 2)
+        joint-pain (r/atom :none)
+        sets-workload (r/atom :just-right)]
+    (fn [{:keys [muscle-group]}]
+      [:dialog {:open true :style {:max-width "450px"}}
+       [:article
+        [:header
+         [:h3 (str "Rate your " (name muscle-group) " session")]]
+
+        ;; Pump slider
+        [:div {:style {:margin-bottom "1rem"}}
+         [:label "Pump: " (case @pump 0 "None" 1 "Mild" 2 "Moderate" 3 "Great" 4 "Best ever")]
+         [:input {:type "range" :min 0 :max 4 :value @pump
+                  :on-change #(reset! pump (js/parseInt (-> % .-target .-value)))}]]
+
+        ;; Joint pain
+        [:div {:style {:margin-bottom "1rem"}}
+         [:label "Joint pain:"]
+         [:div {:style {:display "flex" :gap "1rem" :margin-top "0.5rem"}}
+          (doall
+           (for [{:keys [value label]} joint-pain-options]
+             ^{:key value}
+             [:label {:style {:display "flex" :align-items "center" :gap "0.25rem"}}
+              [:input {:type "radio"
+                       :name "joint-pain"
+                       :checked (= @joint-pain value)
+                       :on-change #(reset! joint-pain value)}]
+              label]))]]
+
+        ;; Sets workload
+        [:div {:style {:margin-bottom "1rem"}}
+         [:label "Number of sets felt:"]
+         [:div {:style {:display "flex" :flex-direction "column" :gap "0.25rem" :margin-top "0.5rem"}}
+          (doall
+           (for [{:keys [value label]} sets-workload-options]
+             ^{:key value}
+             [:label {:style {:display "flex" :align-items "center" :gap "0.5rem"}}
+              [:input {:type "radio"
+                       :name "sets-workload"
+                       :checked (= @sets-workload value)
+                       :on-change #(reset! sets-workload value)}]
+              label]))]]
+
+        [:footer
+         [:button {:on-click #(on-submit muscle-group {:pump @pump
+                                                       :joint-pain @joint-pain
+                                                       :sets-workload @sets-workload})}
+          "Submit"]
+         [:button.secondary {:on-click #(on-dismiss muscle-group) :style {:margin-left "0.5rem"}}
+          "Skip"]]]])))
 
 ;; -----------------------------------------------------------------------------
 ;; Navigation menu
@@ -210,22 +294,91 @@
 ;; Pages
 ;; -----------------------------------------------------------------------------
 
+(defonce ^:private dismissed-feedback (r/atom #{}))   ; #{[:soreness :quads] [:session :quads]}
+
+(defn- get-workout-muscle-groups
+  "Extract all unique muscle groups from a workout's exercises."
+  [exercises-map]
+  (->> exercises-map
+       vals
+       (mapcat identity)
+       (mapcat :muscle-groups)
+       (remove nil?)
+       distinct))
+
 (defn- workouts-page
-  "Main workout tracking page."
+  "Main workout tracking page with feedback popups."
   []
   (let [events (db/get-all-events)
         plan (plan/get-plan)
         plan-name (plan/get-plan-name)
         progress (state/view-progress-in-plan events plan)
-        mesocycle-data (get progress plan-name)]
+        mesocycle-data (get progress plan-name)
+
+        ;; Auto-detect active workout from most recent set
+        active (state/last-active-workout events)
+        workout-exercises (when active
+                            (get-in progress [(:mesocycle active)
+                                              (:microcycle active)
+                                              (:workout active)]))
+        muscle-groups (when workout-exercises
+                        (get-workout-muscle-groups workout-exercises))
+
+        ;; Get dismissed feedback (whole set for reactivity)
+        dismissed @dismissed-feedback
+
+        ;; Dismissal keys include workout context
+        make-dismiss-key (fn [type mg]
+                           [type (:mesocycle active) (:microcycle active) (:workout active) mg])
+
+        pending-soreness (when active
+                           (->> (state/pending-soreness-feedback events progress active muscle-groups)
+                                (remove #(contains? dismissed (make-dismiss-key :soreness %)))
+                                first))
+        pending-session (when (and active (not pending-soreness))
+                          (->> (state/pending-session-rating events progress active muscle-groups)
+                               (remove #(contains? dismissed (make-dismiss-key :session %)))
+                               first))]
+
     [:<>
+     ;; Feedback popups
+     (when pending-soreness
+       [soreness-popup
+        {:muscle-group pending-soreness
+         :on-submit (fn [muscle-group soreness]
+                      (db/log-soreness-reported!
+                       (assoc active :muscle-group muscle-group :soreness soreness)))
+         :on-dismiss (fn [muscle-group]
+                       (swap! dismissed-feedback conj (make-dismiss-key :soreness muscle-group)))}])
+
+     (when pending-session
+       [session-rating-popup
+        {:muscle-group pending-session
+         :on-submit (fn [muscle-group {:keys [pump joint-pain sets-workload]}]
+                      (db/log-session-rated!
+                       (assoc active
+                              :muscle-group muscle-group
+                              :pump pump
+                              :joint-pain joint-pain
+                              :sets-workload sets-workload)))
+         :on-dismiss (fn [muscle-group]
+                       (swap! dismissed-feedback conj (make-dismiss-key :session muscle-group)))}])
+
      [:header
       [:h1 plan-name]
       [:p "Track your workout progression"]]
 
      (for [[microcycle-idx workouts-map] (sort-by first mesocycle-data)]
        ^{:key microcycle-idx}
-       [microcycle-section plan-name microcycle-idx workouts-map])]))
+       [:section {:key microcycle-idx}
+        [:h2 (str "Week " (inc microcycle-idx))]
+        (for [[workout-key exercises-map] workouts-map]
+          ^{:key workout-key}
+          [:section
+           [:h3 (str/capitalize (name workout-key))]
+           (for [[exercise-name sets] exercises-map]
+             ^{:key exercise-name}
+             [exercise-card plan-name microcycle-idx workout-key exercise-name sets])])])]))
 
 ;; -----------------------------------------------------------------------------
 ;; Plan import
@@ -303,7 +456,7 @@
      "Export All Data"]
     [:button.secondary.outline {:style {:margin-left "0.5rem"}
                                 :on-click #(when (js/confirm "Clear all workout logs?")
-                                             (js/console.log "Clear data"))}
+                                             (storage/clear-db!))}
      "Clear Logs"]]
 
    [:section
