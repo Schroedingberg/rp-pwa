@@ -1,4 +1,4 @@
-# Romance Progression PWA
+# progressive - Track your progress
 
 A local-first Progressive Web App for workout tracking, built with ClojureScript.
 
