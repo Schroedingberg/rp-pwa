@@ -349,5 +349,5 @@
     (is (string? (plan/validate-template {:name "X" :n-microcycles 4 :workouts {"monday" {}}}))))
 
   (testing "requires each workout to have :exercises map"
-    (is (string? (plan/validate-template 
+    (is (string? (plan/validate-template
                   {:name "X" :n-microcycles 4 :workouts {:monday {}}})))))

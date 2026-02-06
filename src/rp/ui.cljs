@@ -13,6 +13,7 @@
         ├── plans-page
         └── settings-page"
   (:require [reagent.core :as r]
+            [cljs.reader :as reader]
             [rp.db :as db]
             [rp.plan :as plan]
             [rp.state :as state]
@@ -28,7 +29,7 @@
   "A single set with weight/reps inputs.
   Completed sets can be clicked to enter edit mode for corrections.
   Skipped sets show as disabled with a skip indicator."
-  [mesocycle microcycle workout exercise set-index set-data]
+  [_mesocycle _microcycle _workout _exercise _set-index _set-data]
   (let [weight (r/atom "")
         reps (r/atom "")
         editing? (r/atom false)]
@@ -190,6 +191,31 @@
        ^{:key microcycle-idx}
        [microcycle-section plan-name microcycle-idx workouts-map])]))
 
+;; -----------------------------------------------------------------------------
+;; Plan import
+;; -----------------------------------------------------------------------------
+
+(defn- handle-import-result
+  "Process parsed EDN, validate, and save as current plan."
+  [text]
+  (try
+    (let [template (reader/read-string text)]
+      (if-let [err (plan/validate-template template)]
+        (js/alert (str "Invalid plan: " err))
+        (do
+          (plan/set-template! template)
+          (js/alert (str "Imported: " (:name template)))
+          (reset! current-page :workouts))))
+    (catch :default ex
+      (js/alert (str "Parse error: " (.-message ex))))))
+
+(defn- handle-file-select
+  "Handle file input change event."
+  [e]
+  (when-let [file (-> e .-target .-files (aget 0))]
+    (-> (.text file)
+        (.then handle-import-result))))
+
 (defn- plans-page
   "Plan management page - view, import, create plans."
   []
@@ -225,21 +251,7 @@
       [:p "Import a plan from EDN file"]
       [:input {:type "file"
                :accept ".edn"
-               :on-change
-               (fn [e]
-                 (when-let [file (-> e .-target .-files (aget 0))]
-                   (-> (.text file)
-                       (.then (fn [text]
-                                (try
-                                  (let [template (cljs.reader/read-string text)]
-                                    (if-let [err (plan/validate-template template)]
-                                      (js/alert (str "Invalid plan: " err))
-                                      (do
-                                        (plan/set-template! template)
-                                        (js/alert (str "Imported: " (:name template)))
-                                        (reset! current-page :workouts))))
-                                  (catch :default ex
-                                    (js/alert (str "Parse error: " (.-message ex)))))))))))}]]])))
+               :on-change handle-file-select}]]]))
 
 (defn- settings-page
   "App settings page."
