@@ -19,14 +19,16 @@
     :exercise "Squat"
     :set-index 0
     :performed-weight 100
-    :performed-reps 8}
+    :performed-reps 8
+    :timestamp 1000}
    {:mesocycle "My Plan"
     :microcycle 0
     :workout :monday
     :exercise "Squat"
     :set-index 1
     :performed-weight 105
-    :performed-reps 6}])
+    :performed-reps 6
+    :timestamp 2000}])
 
 ;; =============================================================================
 ;; util tests
@@ -64,19 +66,67 @@
              (util/deep-merge-with (fn [_ x] x) m1 m2))))))
 
 ;; =============================================================================
+;; dedupe-by-latest tests (corrections via latest-wins)
+;; =============================================================================
+
+(deftest dedupe-by-latest-test
+  (testing "keeps single event unchanged"
+    (let [events [{:mesocycle "P" :microcycle 0 :workout :mon :exercise "A"
+                   :set-index 0 :performed-weight 100 :timestamp 1000}]
+          result (#'state/dedupe-by-latest events)]
+      (is (= 1 (count result)))
+      (is (= 100 (:performed-weight (first result))))))
+
+  (testing "keeps latest when same position has multiple events (correction)"
+    (let [events [{:mesocycle "P" :microcycle 0 :workout :mon :exercise "A"
+                   :set-index 0 :performed-weight 100 :timestamp 1000}
+                  {:mesocycle "P" :microcycle 0 :workout :mon :exercise "A"
+                   :set-index 0 :performed-weight 105 :timestamp 2000}]  ; correction
+          result (#'state/dedupe-by-latest events)]
+      (is (= 1 (count result)))
+      (is (= 105 (:performed-weight (first result))))))
+
+  (testing "keeps latest regardless of input order"
+    (let [events [{:mesocycle "P" :microcycle 0 :workout :mon :exercise "A"
+                   :set-index 0 :performed-weight 105 :timestamp 2000}
+                  {:mesocycle "P" :microcycle 0 :workout :mon :exercise "A"
+                   :set-index 0 :performed-weight 100 :timestamp 1000}]
+          result (#'state/dedupe-by-latest events)]
+      (is (= 105 (:performed-weight (first result))))))
+
+  (testing "handles multiple corrections to same set"
+    (let [events [{:mesocycle "P" :microcycle 0 :workout :mon :exercise "A"
+                   :set-index 0 :performed-weight 100 :timestamp 1000}
+                  {:mesocycle "P" :microcycle 0 :workout :mon :exercise "A"
+                   :set-index 0 :performed-weight 105 :timestamp 2000}
+                  {:mesocycle "P" :microcycle 0 :workout :mon :exercise "A"
+                   :set-index 0 :performed-weight 102 :timestamp 3000}]  ; final correction
+          result (#'state/dedupe-by-latest events)]
+      (is (= 1 (count result)))
+      (is (= 102 (:performed-weight (first result))))))
+
+  (testing "different set positions are kept separate"
+    (let [events [{:mesocycle "P" :microcycle 0 :workout :mon :exercise "A"
+                   :set-index 0 :performed-weight 100 :timestamp 1000}
+                  {:mesocycle "P" :microcycle 0 :workout :mon :exercise "A"
+                   :set-index 1 :performed-weight 100 :timestamp 2000}]
+          result (#'state/dedupe-by-latest events)]
+      (is (= 2 (count result))))))
+
+;; =============================================================================
 ;; events->plan-map tests (internal function)
 ;; =============================================================================
 
 (deftest events->plan-map-test
   (testing "transforms single event into nested structure"
     (let [event {:mesocycle "Plan" :microcycle 0 :workout :monday
-                 :exercise "Squat" :set-index 0 :performed-weight 100}
+                 :exercise "Squat" :set-index 0 :performed-weight 100 :timestamp 1000}
           result (#'state/events->plan-map [event])]
       (is (= 100 (get-in result ["Plan" 0 :monday "Squat" 0 :performed-weight])))))
 
   (testing "handles out-of-order events"
-    (let [events [{:mesocycle "P" :microcycle 0 :workout :mon :exercise "A" :set-index 2}
-                  {:mesocycle "P" :microcycle 0 :workout :mon :exercise "A" :set-index 0}]
+    (let [events [{:mesocycle "P" :microcycle 0 :workout :mon :exercise "A" :set-index 2 :timestamp 1000}
+                  {:mesocycle "P" :microcycle 0 :workout :mon :exercise "A" :set-index 0 :timestamp 2000}]
           result (#'state/events->plan-map events)
           sets (get-in result ["P" 0 :mon "A"])]
       (is (= 3 (count sets)))
@@ -85,8 +135,8 @@
       (is (= 2 (:set-index (nth sets 2))))))
 
   (testing "handles events with gaps in set indices"
-    (let [events [{:mesocycle "P" :microcycle 0 :workout :mon :exercise "A" :set-index 0}
-                  {:mesocycle "P" :microcycle 0 :workout :mon :exercise "A" :set-index 3}]
+    (let [events [{:mesocycle "P" :microcycle 0 :workout :mon :exercise "A" :set-index 0 :timestamp 1000}
+                  {:mesocycle "P" :microcycle 0 :workout :mon :exercise "A" :set-index 3 :timestamp 2000}]
           result (#'state/events->plan-map events)
           sets (get-in result ["P" 0 :mon "A"])]
       (is (= 4 (count sets)))
@@ -96,21 +146,21 @@
       (is (some? (nth sets 3)))))
 
   (testing "handles multiple exercises in same workout"
-    (let [events [{:mesocycle "P" :microcycle 0 :workout :mon :exercise "A" :set-index 0}
-                  {:mesocycle "P" :microcycle 0 :workout :mon :exercise "B" :set-index 0}]
+    (let [events [{:mesocycle "P" :microcycle 0 :workout :mon :exercise "A" :set-index 0 :timestamp 1000}
+                  {:mesocycle "P" :microcycle 0 :workout :mon :exercise "B" :set-index 0 :timestamp 2000}]
           result (#'state/events->plan-map events)]
       (is (some? (get-in result ["P" 0 :mon "A"])))
       (is (some? (get-in result ["P" 0 :mon "B"])))))
 
   (testing "handles multiple microcycles"
-    (let [events [{:mesocycle "P" :microcycle 0 :workout :mon :exercise "A" :set-index 0}
-                  {:mesocycle "P" :microcycle 1 :workout :mon :exercise "A" :set-index 0}]
+    (let [events [{:mesocycle "P" :microcycle 0 :workout :mon :exercise "A" :set-index 0 :timestamp 1000}
+                  {:mesocycle "P" :microcycle 1 :workout :mon :exercise "A" :set-index 0 :timestamp 2000}]
           result (#'state/events->plan-map events)]
       (is (some? (get-in result ["P" 0 :mon "A"])))
       (is (some? (get-in result ["P" 1 :mon "A"])))))
 
   (testing "handles string workout names (converts to keyword)"
-    (let [events [{:mesocycle "P" :microcycle 0 :workout "monday" :exercise "A" :set-index 0}]
+    (let [events [{:mesocycle "P" :microcycle 0 :workout "monday" :exercise "A" :set-index 0 :timestamp 1000}]
           result (#'state/events->plan-map events)]
       ;; The workout key should be keywordized
       (is (some? (get-in result ["P" 0 :monday "A"]))))))
@@ -140,7 +190,7 @@
 
   (testing "handles extra sets beyond plan"
     (let [extra-event {:mesocycle "My Plan" :microcycle 0 :workout :monday
-                       :exercise "Squat" :set-index 5 :performed-weight 90}
+                       :exercise "Squat" :set-index 5 :performed-weight 90 :timestamp 1000}
           result (state/view-progress-in-plan [extra-event] sample-plan)
           squat-sets (get-in result ["My Plan" 0 :monday "Squat"])]
       ;; Should have 6 sets (0-5)
@@ -152,11 +202,20 @@
 
   (testing "handles exercise not in plan"
     (let [new-exercise-event {:mesocycle "My Plan" :microcycle 0 :workout :monday
-                              :exercise "Deadlift" :set-index 0 :performed-weight 150}
+                              :exercise "Deadlift" :set-index 0 :performed-weight 150 :timestamp 1000}
           result (state/view-progress-in-plan [new-exercise-event] sample-plan)
           deadlift-sets (get-in result ["My Plan" 0 :monday "Deadlift"])]
       (is (= 1 (count deadlift-sets)))
-      (is (= 150 (:performed-weight (first deadlift-sets)))))))
+      (is (= 150 (:performed-weight (first deadlift-sets))))))
+
+  (testing "correction replaces original data (latest wins)"
+    (let [events [{:mesocycle "My Plan" :microcycle 0 :workout :monday
+                   :exercise "Squat" :set-index 0 :performed-weight 100 :timestamp 1000}
+                  {:mesocycle "My Plan" :microcycle 0 :workout :monday
+                   :exercise "Squat" :set-index 0 :performed-weight 105 :timestamp 2000}]  ; correction
+          result (state/view-progress-in-plan events sample-plan)
+          squat-sets (get-in result ["My Plan" 0 :monday "Squat"])]
+      (is (= 105 (:performed-weight (first squat-sets)))))))
 
 ;; =============================================================================
 ;; plan expansion tests
