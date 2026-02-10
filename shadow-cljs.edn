@@ -1,6 +1,7 @@
-{:source-paths ["src" "test"]
+{:source-paths ["src" "test" "build"]
  :dependencies [[reagent/reagent "1.2.0"]
-                [datascript/datascript "1.7.3"]]
+                [datascript/datascript "1.7.3"]
+                [org.clojure/data.json "2.5.0"]]
  :nrepl {:port 7889}
 
  :builds
@@ -21,7 +22,8 @@
     {:optimizations :none}}
 
    :release
-   {:compiler-options
+   {:build-hooks [(build/inject-version)]
+    :compiler-options
     {:optimizations :advanced}}}
 
   :test

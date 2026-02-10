@@ -30,6 +30,7 @@
   (:require [reagent.core :as r]
             [cljs.reader :as reader]
             [clojure.string :as str]
+            [rp.config :as config]
             [rp.db :as db]
             [rp.plan :as plan]
             [rp.state :as state]
@@ -60,8 +61,10 @@
    [:settings "Settings"]])
 
 (defn- nav-menu []
-  [:nav.container
-   [:ul [:li [:strong "RP"]]]
+  [:nav.container {:style {:position "sticky" :top 0 :z-index 100
+                           :background "var(--pico-background-color)"}}
+   [:ul [:li [:strong "RP"] [:small {:style {:margin-left "0.5rem" :opacity 0.6}}
+                             (str "v" config/VERSION)]]]
    [:ul
     (doall
      (for [[page label] nav-items]

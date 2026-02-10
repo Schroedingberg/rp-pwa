@@ -28,3 +28,5 @@ Thumbs.db
 # Clerk output
 docs/clerk/
 .clerk/
+.lsp/.cache/db.transit.json
+.lsp/.cache/db.transit.json
