@@ -39,6 +39,70 @@
    :some   0.75     ; Reduce due to discomfort
    :severe 0.0})    ; Zero increase with pain
 
+;; Rep ↔ %1RM lookup table
+;; Covers hypertrophy range (5-30 reps), with lower reps for 1RM estimation
+;; Values tuned to match expected rep adjustments from user feedback
+(def ^:private rep-percentage-table
+  {1  1.00
+   2  0.95
+   3  0.93
+   4  0.90
+   5  0.87
+   6  0.85
+   7  0.83
+   8  0.80
+   9  0.77
+   10 0.75
+   11 0.72
+   12 0.70
+   15 0.65
+   20 0.60
+   25 0.55
+   30 0.50})
+
+(defn- lerp
+  "Linear intERPolation: returns value between a and b based on t (0-1)."
+  [a b t]
+  (+ a (* t (- b a))))
+
+(defn- interpolate-in-table
+  "Look up value in table; interpolate linearly between neighbors if not found."
+  [table value]
+  (let [ks (keys table)
+        lower (apply max (filter #(< % value) ks))
+        upper (apply min (filter #(> % value) ks))
+        t (/ (- value lower) (- upper lower))]
+    (lerp (table lower) (table upper) t)))
+
+(defn- reps->percentage
+  "Convert reps to %1RM. Interpolates between known values."
+  [reps]
+  (let [reps (max 1 (min 30 reps))]
+    (or (get rep-percentage-table reps)
+        (interpolate-in-table rep-percentage-table reps))))
+
+;; Inverted table: percentage -> reps (for reverse lookup)
+(def ^:private percentage-rep-table
+  (into {} (map (fn [[r p]] [p r]) rep-percentage-table)))
+
+(defn- percentage->reps
+  "Convert %1RM to reps. Interpolates between known values."
+  [pct]
+  (let [pct (max 0.50 (min 1.0 pct))]
+    (or (get percentage-rep-table pct)
+        (interpolate-in-table percentage-rep-table pct))))
+
+(defn- estimate-1rm
+  "Estimate 1RM from weight and reps using percentage table."
+  [weight reps]
+  (/ weight (reps->percentage reps)))
+
+(defn- reps-for-weight
+  "Calculate reps for a given weight based on estimated 1RM."
+  [one-rm weight]
+  (let [pct (/ weight one-rm)]
+    (js/Math.round (percentage->reps pct))))
+
 ;; -----------------------------------------------------------------------------
 ;; History queries
 ;; -----------------------------------------------------------------------------
@@ -130,7 +194,7 @@
   "Suggest reps for next set.
   
   If actual-weight is provided and differs from prescribed weight,
-  adjusts reps to maintain similar total work.
+  adjusts reps using 1RM-based calculation to maintain equivalent intensity.
   
   Returns nil if no history."
   ([events location]
@@ -143,10 +207,11 @@
            last-reps (:performed-reps last-perf)
            increment (compute-weight-increment events location muscle-groups)
            prescribed-weight (+ last-weight increment)
-           target-work (* prescribed-weight last-reps)]
+           ;; Estimate 1RM from last performance
+           estimated-1rm (estimate-1rm last-weight last-reps)]
        (if (and actual-weight (not= actual-weight prescribed-weight))
-         ;; User overrode weight → adjust reps to maintain work
-         (max 1 (js/Math.round (/ target-work actual-weight)))
+         ;; User overrode weight → adjust reps using 1RM curve
+         (max 1 (reps-for-weight estimated-1rm actual-weight))
          ;; Use last reps as target
          last-reps)))))
 
@@ -177,3 +242,22 @@
                      (= (keyword (:workout %)) (keyword workout))
                      (= (:exercise %) exercise)))
        count))
+
+
+(comment
+
+  (prescribe-reps [{:type :set-completed
+                    :mesocycle "plan1"
+                    :microcycle 0
+                    :workout "day1"
+                    :exercise "squat"
+                    :set-index 0
+                    :performed-weight 100
+                    :performed-reps 10
+                    :timestamp 123456789}]
+                  {:mesocycle "plan1" :microcycle 1 :workout "day1" :exercise "squat" :set-index 0}
+                  105)
+
+
+  ;; end of rich comment block
+  ())

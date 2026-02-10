@@ -77,12 +77,11 @@
       (is (= 10 (prog/prescribe-reps sample-events location 102.5)))))
 
   (testing "adjusts reps down when weight increased beyond prescribed"
-    ;; Last: 100kg × 10 = 1000 work
-    ;; Prescribed: 102.5kg × 10 = 1025 target work  
-    ;; User picks 110kg → 1025/110 ≈ 9.3 → 9 reps
+    ;; Last: 100kg × 10 reps (1RM ≈ 133kg)
+    ;; User picks 110kg → 110/133 = 82.7% → 7 reps (per 1RM table)
     (let [location {:mesocycle "Plan" :microcycle 1 :workout :monday
                     :exercise "Squat" :set-index 0}]
-      (is (= 9 (prog/prescribe-reps sample-events location 110)))))
+      (is (= 7 (prog/prescribe-reps sample-events location 110)))))
 
   (testing "adjusts reps up when weight decreased"
     ;; Prescribed: 102.5kg × 10 = 1025 target work
@@ -90,6 +89,39 @@
     (let [location {:mesocycle "Plan" :microcycle 1 :workout :monday
                     :exercise "Squat" :set-index 0}]
       (is (= 11 (prog/prescribe-reps sample-events location 95)))))
+
+  (testing "adjusts reps using 1RM-based rep ranges - high rep scenario"
+    ;; Issue: Prescribed 41.8kg × 15 reps, user picks 45kg
+    ;; Current (work preservation): 627/45 ≈ 14 reps
+    ;; Expected (1RM-based): 11 reps
+    ;;
+    ;; At high rep ranges, small weight increases have larger rep impacts
+    ;; because the relationship between %1RM and reps is non-linear
+    (let [high-rep-events [{:type :set-completed
+                            :mesocycle "Plan" :microcycle 0 :workout :monday
+                            :exercise "Curl" :set-index 0
+                            :performed-weight 40.0 :performed-reps 15 :timestamp 1000}]
+          location {:mesocycle "Plan" :microcycle 1 :workout :monday
+                    :exercise "Curl" :set-index 0}]
+      ;; Prescribed weight: 40.0 + 2.5 = 42.5
+      (is (= 42.5 (prog/prescribe-weight high-rep-events location)))
+      ;; User picks 45kg → should get 11 reps (per 1RM tables)
+      (is (= 11 (prog/prescribe-reps high-rep-events location 45)))))
+
+  (testing "adjusts reps using 1RM-based rep ranges - moderate rep scenario"
+    ;; Issue: Prescribed 73kg × 9 reps, user picks 75kg
+    ;; Current (work preservation): keeps 9 reps (657/75 ≈ 8.8 → 9)
+    ;; Expected (1RM-based): 7 reps
+    (let [mod-rep-events [{:type :set-completed
+                           :mesocycle "Plan" :microcycle 0 :workout :monday
+                           :exercise "Bench" :set-index 0
+                           :performed-weight 70.0 :performed-reps 9 :timestamp 1000}]
+          location {:mesocycle "Plan" :microcycle 1 :workout :monday
+                    :exercise "Bench" :set-index 0}]
+      ;; Prescribed weight: 70.0 + 2.5 = 72.5
+      (is (= 72.5 (prog/prescribe-weight mod-rep-events location)))
+      ;; User picks 75kg → should get 7 reps (per 1RM tables)
+      (is (= 7 (prog/prescribe-reps mod-rep-events location 75)))))
 
   (testing "returns nil when no history"
     (let [location {:mesocycle "Plan" :microcycle 0 :workout :monday
@@ -113,7 +145,7 @@
                     :exercise "Squat" :set-index 0}
           result (prog/prescribe sample-events location 110)]
       (is (= 102.5 (:weight result)))  ; prescribed weight unchanged
-      (is (= 9 (:reps result)))))      ; reps adjusted
+      (is (= 7 (:reps result)))))      ; reps adjusted per 1RM curve
 
   (testing "returns nils when no history"
     (let [location {:mesocycle "Plan" :microcycle 0 :workout :monday
